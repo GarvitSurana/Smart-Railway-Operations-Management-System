@@ -519,66 +519,83 @@ async function seedDatabase() {
   passengers.forEach(p => insPax.run(p));
   insPax.free();
 
-  // ─── TRAIN RUNNING STATUS (today's live data) ─────────────────────────────────
-  // Simulate current time ~ 12:05 IST
-  const runningStatus = [
-    // 12301 NDLS→HWH — departed NDLS, at CNB, heading to MGS
-    ['12301','NDLS', today, '17:00', '17:00', 0,  0,  4, 1],
-    ['12301','CNB',  today, '20:55', '21:05', 15, 15, 2, 1],
-    ['12301','MGS',  today, null,    null,    0,  0,  1, 0],
-    ['12301','PNBE', today, null,    null,    0,  0,  1, 0],
-    ['12301','HWH',  today, null,    null,    0,  0,  8, 0],
+  // ─── DYNAMIC TRAIN RUNNING STATUS (Realistic Live Simulation) ──────────────────
+  const nowIST = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false, hourCycle: 'h23' });
+  const [currH, currM] = nowIST.split(':').map(Number);
+  const currentAbsoluteMins = currH * 60 + currM;
+  
+  const runningStatus = [];
+  
+  // Group schedule stops logically per train
+  const trainStops = {};
+  schedules.forEach(s => {
+    if (!trainStops[s[0]]) trainStops[s[0]] = [];
+    trainStops[s[0]].push(s);
+  });
 
-    // 12951 NDLS→BCT — running 25 min late, crossed BPL
-    ['12951','NDLS', today, '16:00', '16:00', 0,  0,  1, 1],
-    ['12951','BPL',  today, '02:45', '02:58', 25, 28, 3, 1],
-    ['12951','ADI',  today, null,    null,    0,  0,  2, 0],
-    ['12951','BCT',  today, null,    null,    0,  0,  6, 0],
+  for (let tNum in trainStops) {
+    const stops = trainStops[tNum];
+    let prevSchedMins = -1;
+    let dayOffset = 0;
+    
+    // Assign a random consistent delay per-train: 0, 15, 30, or 45 mins late.
+    const delayMins = Math.floor(Math.random() * 4) * 15;
+    
+    for (let i = 0; i < stops.length; i++) {
+        const [tr, station, stop_num, arr, dep, dist, halt] = stops[i];
+        const timeRef = arr || dep;
+        let [h, m] = timeRef.split(':').map(Number);
+        
+        let schedMins = h * 60 + m;
+        
+        // Multi-day journey crossover detection (e.g. 23:30 -> 02:15 next day)
+        if (schedMins < prevSchedMins - 180) {
+            dayOffset += 24 * 60;
+        }
+        prevSchedMins = schedMins;
+        
+        const absoluteStopMins = schedMins + dayOffset;
+        
+        // Let's assume the train's journey Day 1 represents the current 24-hour bracket.
+        // It has passed if its absolute time + delay is less than or equal to current true absolute time.
+        // Also handle scenarios where the train hasn't departed yet today at all.
+        let hasPassed = 0;
+        if ((absoluteStopMins + delayMins) <= currentAbsoluteMins) {
+             hasPassed = 1;
+        }
 
-    // 12009 Shatabdi — on time, currently at NGP
-    ['12009','NDLS', today, '06:00', '06:00', 0, 0, 3, 1],
-    ['12009','CNB',  today, '09:25', '09:30', 0, 0, 5, 1],
-    ['12009','BPL',  today, '14:15', '14:20', 0, 0, 2, 1],
-    ['12009','NGP',  today, '18:35', '18:40', 0, 0, 1, 1],
-    ['12009','SC',   today, null,    null,    0, 0, 5, 0],
-    ['12009','MAS',  today, null,    null,    0, 0, 9, 0],
+        let actual_arr = arr;
+        let actual_dep = dep;
 
-    // 12309 NDLS→PNBE — arrived PNBE on time
-    ['12309','NDLS', today, '18:55', '18:55', 0, 0, 2, 1],
-    ['12309','CNB',  today, '22:47', '22:57', 0, 0, 4, 1],
-    ['12309','ALD',  today, '00:50', '01:00', 5, 5, 3, 1],
-    ['12309','MGS',  today, '03:15', '03:25', 5, 5, 1, 1],
-    ['12309','PNBE', today, '06:05', null,    5, 0, 1, 1],
-
-    // 12621 Tamil Nadu — currently en route NDLS→MAS, running on time
-    ['12621','NDLS', today, '22:30', '22:30', 0, 0, 8, 1],
-    ['12621','CNB',  today, null,    null,    0, 0, 2, 0],
-    ['12621','ALD',  today, null,    null,    0, 0, 4, 0],
-    ['12621','NGP',  today, null,    null,    0, 0, 3, 0],
-    ['12621','SC',   today, null,    null,    0, 0, 6, 0],
-    ['12621','MAS',  today, null,    null,    0, 0, 7, 0],
-
-    // 22439 Vande Bharat (NDLS -> SVDK) — running on time
-    ['22439','NDLS', today, '06:00', '06:00', 0,  0, 1, 1],
-    ['22439','UMB',  today, '08:10', '08:12', 0,  0, 2, 1],
-    ['22439','LDH',  today, '09:19', '09:21', 0,  0, 3, 1],
-    ['22439','JAT',  today, null,    null,    0,  0, 1, 0],
-
-    // 22436 Vande Bharat (NDLS -> BSB) — 15 min late
-    ['22436','NDLS', today, '06:00', '06:00', 0,  0, 16, 1],
-    ['22436','CNB',  today, '10:23', '10:25', 15, 15, 4, 1],
-    ['22436','PRYJ', today, null,    null,    0,  0, 6,  0],
-
-    // 12925 Paschim Express 
-    ['12925','BDTS', today, '11:30', '11:30', 0,  0, 3,  1],
-    ['12925','ST',   today, '14:50', '14:55', 5,  5, 1,  1],
-    ['12925','BRC',  today, null,    null,    0,  0, 2,  0],
-
-    // 12625 Kerala Express
-    ['12625','TVC',  today, '12:30', '12:30', 0,  0, 1,  1],
-    ['12625','ERS',  today, '16:20', '16:25', 0,  0, 2,  1],
-    ['12625','CBE',  today, null,    null,    0,  0, 3,  0]
-  ];
+        if (hasPassed) {
+             if (arr) {
+                let totalM = m + delayMins;
+                let rh = (h + Math.floor(totalM / 60)) % 24;
+                let rm = totalM % 60;
+                actual_arr = `${rh.toString().padStart(2,'0')}:${rm.toString().padStart(2,'0')}`;
+             }
+             if (dep) {
+                let [dh, dm] = dep.split(':').map(Number);
+                let totalM = dm + delayMins;
+                let rh = (dh + Math.floor(totalM / 60)) % 24;
+                let rm = totalM % 60;
+                actual_dep = `${rh.toString().padStart(2,'0')}:${rm.toString().padStart(2,'0')}`;
+             }
+        }
+        
+        runningStatus.push([
+            tNum,
+            station,
+            today,
+            hasPassed ? actual_arr : null,
+            hasPassed ? actual_dep : null,
+            delayMins,
+            delayMins,
+            Math.floor(Math.random() * 6) + 1, // Platform 1-6
+            hasPassed
+        ]);
+    }
+  }
 
   const insRS = db.prepare(
     'INSERT OR IGNORE INTO train_running_status (train_number,station_code,status_date,actual_arrival,actual_departure,delay_arrival_min,delay_depart_min,platform_number,has_passed) VALUES (?,?,?,?,?,?,?,?,?)'

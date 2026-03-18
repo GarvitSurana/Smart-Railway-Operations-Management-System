@@ -419,6 +419,64 @@ function renderStation({ station, trains, totalTrains }) {
     </div>`;
 }
 
+// ── DELAY ALERTS ────────────────────────────────────────────────────────
+async function searchDelays() {
+  showLoading('delay-result');
+  try {
+    const res = await fetch(`${API}/api/delayed-passengers`);
+    const json = await res.json();
+    if (!json.success) { showError('delay-result', json.message); return; }
+    renderDelays(json.data);
+  } catch (e) {
+    showError('delay-result', 'Server error. Make sure the server is running.');
+  }
+}
+
+function renderDelays(passengers) {
+  if (passengers.length === 0) {
+    document.getElementById('delay-result').innerHTML = `
+      <div class="error-card">
+        <div class="error-icon">✅</div>
+        <div>
+          <div class="error-title">No Delays</div>
+          <div class="error-msg">All tracked trains are running on time today!</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const paxRows = passengers.map(p => {
+    return `
+      <tr>
+        <td><strong>${p.name}</strong></td>
+        <td><code class="pnr-badge" style="font-size:0.85rem">${p.pnr}</code></td>
+        <td>
+          <div style="font-weight:600">${p.train_number}</div>
+          <div style="font-size:0.75rem;color:var(--text-2)">${p.train_name}</div>
+        </td>
+        <td>${p.from_station} → ${p.to_station}</td>
+        <td><span class="status-late">+${p.max_delay} min</span></td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('delay-result').innerHTML = `
+    <div class="passengers-card" style="margin-top: 24px;">
+      <h3>🚨 Affected Passengers (${passengers.length})</h3>
+      <table class="passenger-table">
+        <thead>
+          <tr>
+            <th>Passenger Name</th>
+            <th>PNR</th>
+            <th>Train</th>
+            <th>Route</th>
+            <th>Current Delay</th>
+          </tr>
+        </thead>
+        <tbody>${paxRows}</tbody>
+      </table>
+    </div>`;
+}
+
 // ── Load stats from API ──────────────────────────────────────────────────-
 async function loadStats() {
   try {
