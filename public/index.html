@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IndianRail Live — Train Running Status & PNR</title>
+  <meta name="description" content="Check live train running status, PNR status, trains between stations, and station departure board for Indian Railways." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">🚆</div>
+        <div class="logo-text">
+          <span class="logo-title">IndianRail<span class="logo-live">Live</span></span>
+          <span class="logo-sub">National Train Enquiry System</span>
+        </div>
+      </div>
+      <div class="header-info">
+        <div class="live-badge">● LIVE</div>
+        <div class="header-time" id="header-clock">--:-- IST</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── TICKER ─────────────────────────────────────────────────────────── -->
+  <div class="ticker-wrapper">
+    <div class="ticker-label">ALERTS</div>
+    <div class="ticker-track">
+      <div class="ticker-content">
+        🚨 Train 12951 Mumbai Rajdhani running 25 min late &nbsp;|&nbsp;
+        ✅ Train 12009 Shatabdi Express running on time &nbsp;|&nbsp;
+        ⚠️ Fog alert on Central Railway – Delhi routes may be delayed &nbsp;|&nbsp;
+        🛑 Maintenance block on MAS–NGP section tonight 01:00–03:00 &nbsp;|&nbsp;
+        📢 Emergency helpline: 139 &nbsp;|&nbsp;
+        🚨 Train 12951 Mumbai Rajdhani running 25 min late &nbsp;|&nbsp;
+        ✅ Train 12009 Shatabdi Express running on time &nbsp;|&nbsp;
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HERO ───────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-inner">
+      <h1 class="hero-title">Find Your Train, Anywhere, Anytime</h1>
+      <p class="hero-subtitle">Real-time Indian Railway data — Train status, PNR, station boards & more</p>
+    </div>
+  </section>
+
+  <!-- ── MAIN TABS ──────────────────────────────────────────────────────── -->
+  <div class="container">
+    <nav class="tab-nav" role="tablist">
+      <button class="tab-btn active" data-tab="train-status" role="tab" id="tab-train">
+        <span class="tab-icon">🚆</span> Train Status
+      </button>
+      <button class="tab-btn" data-tab="pnr-status" role="tab" id="tab-pnr">
+        <span class="tab-icon">📋</span> PNR Status
+      </button>
+      <button class="tab-btn" data-tab="trains-between" role="tab" id="tab-between">
+        <span class="tab-icon">🔁</span> Trains Between
+      </button>
+      <button class="tab-btn" data-tab="station-board" role="tab" id="tab-station">
+        <span class="tab-icon">🚉</span> Station Board
+      </button>
+    </nav>
+
+    <!-- TRAIN STATUS TAB -->
+    <div class="tab-content active" id="train-status">
+      <div class="search-card">
+        <h2 class="search-title">Train Running Status</h2>
+        <p class="search-desc">Enter train number to see live running status with delay information</p>
+        <div class="search-row">
+          <div class="search-field">
+            <label for="train-input">Train Number</label>
+            <input type="text" id="train-input" placeholder="e.g. 12301, 12951, 12009" maxlength="6" />
+          </div>
+          <button class="search-btn" onclick="searchTrain()">
+            <span>Search</span> →
+          </button>
+        </div>
+        <div class="quick-links">
+          <span class="ql-label">Quick search:</span>
+          <button class="ql-btn" onclick="quickTrain('12301')">12301 Howrah Rajdhani</button>
+          <button class="ql-btn" onclick="quickTrain('12951')">12951 Mumbai Rajdhani</button>
+          <button class="ql-btn" onclick="quickTrain('12009')">12009 Shatabdi</button>
+          <button class="ql-btn" onclick="quickTrain('12621')">12621 Tamil Nadu Exp</button>
+        </div>
+      </div>
+      <div id="train-result"></div>
+    </div>
+
+    <!-- PNR STATUS TAB -->
+    <div class="tab-content" id="pnr-status">
+      <div class="search-card">
+        <h2 class="search-title">PNR Status</h2>
+        <p class="search-desc">Enter your 10-digit PNR number to check booking and passenger status</p>
+        <div class="search-row">
+          <div class="search-field">
+            <label for="pnr-input">PNR Number</label>
+            <input type="text" id="pnr-input" placeholder="10-digit PNR number" maxlength="10" />
+          </div>
+          <button class="search-btn" onclick="searchPNR()">
+            <span>Check</span> →
+          </button>
+        </div>
+        <div class="quick-links">
+          <span class="ql-label">Sample PNRs:</span>
+          <button class="ql-btn" onclick="quickPNR('1234567890')">1234567890</button>
+          <button class="ql-btn" onclick="quickPNR('2345678901')">2345678901</button>
+          <button class="ql-btn" onclick="quickPNR('3456789012')">3456789012</button>
+          <button class="ql-btn" onclick="quickPNR('7890123456')">7890123456</button>
+        </div>
+      </div>
+      <div id="pnr-result"></div>
+    </div>
+
+    <!-- TRAINS BETWEEN TAB -->
+    <div class="tab-content" id="trains-between">
+      <div class="search-card">
+        <h2 class="search-title">Trains Between Stations</h2>
+        <p class="search-desc">Find all trains running between two stations</p>
+        <div class="search-row between-row">
+          <div class="search-field">
+            <label for="from-input">From Station</label>
+            <input type="text" id="from-input" placeholder="e.g. NDLS, HWH, BCT" />
+          </div>
+          <div class="swap-btn" onclick="swapStations()">⇄</div>
+          <div class="search-field">
+            <label for="to-input">To Station</label>
+            <input type="text" id="to-input" placeholder="e.g. MAS, SBC, SC" />
+          </div>
+          <button class="search-btn" onclick="searchBetween()">
+            <span>Search</span> →
+          </button>
+        </div>
+        <div class="quick-links">
+          <span class="ql-label">Popular routes:</span>
+          <button class="ql-btn" onclick="quickBetween('NDLS','HWH')">NDLS → HWH</button>
+          <button class="ql-btn" onclick="quickBetween('NDLS','MAS')">NDLS → MAS</button>
+          <button class="ql-btn" onclick="quickBetween('NDLS','BCT')">NDLS → BCT</button>
+          <button class="ql-btn" onclick="quickBetween('NDLS','SBC')">NDLS → SBC</button>
+        </div>
+      </div>
+      <div id="between-result"></div>
+    </div>
+
+    <!-- STATION BOARD TAB -->
+    <div class="tab-content" id="station-board">
+      <div class="search-card">
+        <h2 class="search-title">Station Live Board</h2>
+        <p class="search-desc">View all scheduled arrivals and departures at a station for today</p>
+        <div class="search-row">
+          <div class="search-field">
+            <label for="station-input">Station Code</label>
+            <input type="text" id="station-input" placeholder="e.g. NDLS, HWH, MAS, BCT" maxlength="6" />
+          </div>
+          <button class="search-btn" onclick="searchStation()">
+            <span>View Board</span> →
+          </button>
+        </div>
+        <div class="quick-links">
+          <span class="ql-label">Major stations:</span>
+          <button class="ql-btn" onclick="quickStation('NDLS')">New Delhi (NDLS)</button>
+          <button class="ql-btn" onclick="quickStation('HWH')">Howrah (HWH)</button>
+          <button class="ql-btn" onclick="quickStation('MAS')">Chennai (MAS)</button>
+          <button class="ql-btn" onclick="quickStation('SC')">Secunderabad (SC)</button>
+        </div>
+      </div>
+      <div id="station-result"></div>
+    </div>
+  </div>
+
+  <!-- ── STATS BAR ──────────────────────────────────────────────────────── -->
+  <section class="stats-bar">
+    <div class="stat-item">
+      <span class="stat-number" id="stat-trains">20+</span>
+      <span class="stat-label">Trains Tracked</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-number" id="stat-stations">25+</span>
+      <span class="stat-label">Stations</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-number">9</span>
+      <span class="stat-label">Railway Zones</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-number">24/7</span>
+      <span class="stat-label">Live Monitoring</span>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <p>🚆 <strong>IndianRail Live</strong> — A DBMS Project inspired by NTES (National Train Enquiry System)</p>
+      <p class="footer-sub">For academic purposes only | Emergency Helpline: <strong>139</strong></p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
