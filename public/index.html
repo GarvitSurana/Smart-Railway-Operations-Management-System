@@ -67,6 +67,9 @@
       <button class="tab-btn" data-tab="station-board" role="tab" id="tab-station">
         <span class="tab-icon">🚉</span> Station Board
       </button>
+      <button class="tab-btn" data-tab="delay-alerts" role="tab" id="tab-delays" onclick="searchDelays()">
+        <span class="tab-icon">🚨</span> Delay Alerts
+      </button>
     </nav>
 
     <!-- TRAIN STATUS TAB -->
@@ -172,6 +175,18 @@
         </div>
       </div>
       <div id="station-result"></div>
+    </div>
+
+    <!-- DELAY ALERTS TAB -->
+    <div class="tab-content" id="delay-alerts">
+      <div class="search-card">
+        <h2 class="search-title">Delayed Passengers</h2>
+        <p class="search-desc">All passengers travelling on delayed trains today</p>
+        <button class="search-btn" onclick="searchDelays()" style="margin-top:16px;">
+          <span>Refresh List</span> →
+        </button>
+      </div>
+      <div id="delay-result"></div>
     </div>
   </div>
 

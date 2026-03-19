@@ -205,6 +205,29 @@ app.get('/api/pnr/:pnr', (req, res) => {
   });
 });
 
+// GET /api/delayed-passengers — List passengers on delayed trains
+app.get('/api/delayed-passengers', (req, res) => {
+  const delayedSql = `
+    SELECT
+      p.name, p.age, p.gender, p.seat_number, p.booking_status, p.pnr,
+      pb.train_number, t.train_name, pb.from_station, pb.to_station,
+      MAX(rs.delay_arrival_min, rs.delay_depart_min) as max_delay
+    FROM passengers p
+    JOIN pnr_bookings pb ON p.pnr = pb.pnr
+    JOIN trains t ON pb.train_number = t.train_number
+    JOIN train_running_status rs ON pb.train_number = rs.train_number AND rs.status_date = pb.journey_date
+    WHERE rs.delay_arrival_min > 0 OR rs.delay_depart_min > 0
+    GROUP BY p.pnr, p.id
+    ORDER BY max_delay DESC
+  `;
+  const delayedPassengers = queryAll(delayedSql);
+
+  res.json({
+    success: true,
+    data: delayedPassengers
+  });
+});
+
 // GET /api/trains-between?from=NDLS&to=HWH&date=2026-03-13
 app.get('/api/trains-between', (req, res) => {
   const { from, to, date } = req.query;
