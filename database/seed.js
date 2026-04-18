@@ -34,6 +34,7 @@ async function seedDatabase() {
       source_code  TEXT NOT NULL,
       dest_code    TEXT NOT NULL,
       runs_on      TEXT NOT NULL DEFAULT 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
+      capacity     INTEGER NOT NULL DEFAULT 5,
       FOREIGN KEY (source_code) REFERENCES stations(station_code),
       FOREIGN KEY (dest_code)   REFERENCES stations(station_code)
     );
@@ -99,6 +100,24 @@ async function seedDatabase() {
       FOREIGN KEY (train_number) REFERENCES trains(train_number),
       FOREIGN KEY (station_code) REFERENCES stations(station_code)
     );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      train_number       TEXT NOT NULL,
+      message            TEXT NOT NULL,
+      created_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TRIGGER IF NOT EXISTS delay_notification
+    AFTER UPDATE ON train_running_status
+    WHEN NEW.delay_arrival_min > 30 OR NEW.delay_depart_min > 30
+    BEGIN
+      INSERT INTO notifications (train_number, message)
+      VALUES (
+        NEW.train_number, 
+        'Train ' || NEW.train_number || ' is significantly delayed at station ' || NEW.station_code || '. Delay: ' || MAX(NEW.delay_arrival_min, NEW.delay_depart_min) || ' minutes.'
+      );
+    END;
   `);
 
   // ─── ZONES ────────────────────────────────────────────────────────────────────
@@ -263,7 +282,7 @@ async function seedDatabase() {
     ['12723', 'Telangana Express',               'Superfast',  'HYB',  'NDLS', 'Mon,Tue,Wed,Thu,Fri,Sat,Sun'],
     ['12724', 'Telangana Express',               'Superfast',  'NDLS', 'HYB',  'Mon,Tue,Wed,Thu,Fri,Sat,Sun'],
   ];
-  const insTrain = db.prepare('INSERT OR IGNORE INTO trains VALUES (?,?,?,?,?,?)');
+  const insTrain = db.prepare('INSERT OR IGNORE INTO trains (train_number, train_name, train_type, source_code, dest_code, runs_on) VALUES (?,?,?,?,?,?)');
   trains.forEach(t => insTrain.run(t));
   insTrain.free();
 
@@ -444,12 +463,51 @@ async function seedDatabase() {
     ['12626','TVC',  8, '22:30', null,    3035, 0 ],
   ];
 
+  // ─── DYNAMIC SCHEDULE OFFSET (Make all trains active now) ──────────────
+  const nowIST = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false, hourCycle: 'h23' });
+  const [currH, currM] = nowIST.split(':').map(Number);
+  const currentAbsoluteMins = currH * 60 + currM;
+
+  const trainOffsets = {};
+  
   const insSched = db.prepare(
     'INSERT OR IGNORE INTO train_schedules (train_number,station_code,stop_number,arrival_time,departure_time,distance_km,halt_minutes) VALUES (?,?,?,?,?,?,?)'
   );
-  schedules.forEach(s => insSched.run(s));
-  insSched.free();
+  
+  schedules.forEach(s => {
+    const tNum = s[0];
+    const stop_num = s[2];
+    let arr = s[3];
+    let dep = s[4];
 
+    // Determine a random offset for the whole train based on its first stop
+    if (stop_num === 1) {
+      const [h, m] = dep.split(':').map(Number);
+      const schedMins = h * 60 + m;
+      // We want the train to have departed 30-300 mins ago
+      const targetMins = currentAbsoluteMins - (Math.floor(Math.random() * 270) + 30);
+      trainOffsets[tNum] = targetMins - schedMins;
+    }
+
+    const offset = trainOffsets[tNum] || 0;
+
+    const applyOffset = (timeStr) => {
+      if (!timeStr) return null;
+      let [h, m] = timeStr.split(':').map(Number);
+      let totalMins = h * 60 + m + offset;
+      // handle negative times and wraps
+      totalMins = ((totalMins % 1440) + 1440) % 1440;
+      let rh = Math.floor(totalMins / 60);
+      let rm = totalMins % 60;
+      return `${rh.toString().padStart(2, '0')}:${rm.toString().padStart(2, '0')}`;
+    };
+
+    s[3] = applyOffset(arr);
+    s[4] = applyOffset(dep);
+
+    insSched.run(s);
+  });
+  insSched.free();
   // ─── PNR BOOKINGS ─────────────────────────────────────────────────────────────
   const today = new Date().toISOString().slice(0, 10); // e.g. 2026-03-13
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -520,9 +578,7 @@ async function seedDatabase() {
   insPax.free();
 
   // ─── DYNAMIC TRAIN RUNNING STATUS (Realistic Live Simulation) ──────────────────
-  const nowIST = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false, hourCycle: 'h23' });
-  const [currH, currM] = nowIST.split(':').map(Number);
-  const currentAbsoluteMins = currH * 60 + currM;
+  // Variables already declared above
   
   const runningStatus = [];
   
@@ -619,3 +675,4 @@ async function seedDatabase() {
 }
 
 seedDatabase().catch(console.error);
+

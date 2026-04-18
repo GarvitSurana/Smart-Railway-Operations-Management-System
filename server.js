@@ -45,6 +45,27 @@ function queryOne(sql, params = []) {
   return rows[0] || null;
 }
 
+// Helper: randomly delay a train to trigger notifications
+function simulateRandomDelay() {
+  if (!db) return;
+  const train = queryOne("SELECT train_number FROM trains ORDER BY RANDOM() LIMIT 1");
+  if (!train) return;
+  const extraDelay = Math.floor(Math.random() * 40) + 20; // 20-60 mins
+  db.run(`
+    UPDATE train_running_status
+    SET delay_arrival_min = delay_arrival_min + ?,
+        delay_depart_min = delay_depart_min + ?
+    WHERE train_number = ? AND has_passed = 0
+  `, [extraDelay, extraDelay, train.train_number]);
+  
+  // Persist memory db to file
+  const data = Buffer.from(db.export());
+  fs.writeFileSync(DB_PATH, data);
+}
+
+// Start simulation loop
+setInterval(simulateRandomDelay, 60000); // simulate delay every minute
+
 // ─── API ROUTES ───────────────────────────────────────────────────────────────
 
 // GET /api/trains — List all trains
@@ -318,6 +339,73 @@ app.get('/api/station/:code', (req, res) => {
 app.get('/api/classes', (req, res) => {
   const classes = queryAll('SELECT * FROM classes ORDER BY fare_per_km DESC');
   res.json({ success: true, data: classes });
+});
+
+// GET /api/notifications — Get all delay notifications
+app.get('/api/notifications', (req, res) => {
+  const notifications = queryAll('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20');
+  res.json({ success: true, data: notifications });
+});
+
+// POST /api/book-ticket — Book a ticket with concurrency control
+app.post('/api/book-ticket', (req, res) => {
+  const { train_number, from_station, to_station, class_code, passengers, distance, date } = req.body;
+  if (!train_number || !from_station || !to_station || !class_code || !passengers || !passengers.length || !date) {
+    return res.status(400).json({ success: false, message: 'Missing booking details' });
+  }
+
+  try {
+    db.run('BEGIN TRANSACTION');
+
+    // Calculate Dynamic Fare
+    let dist = distance;
+    if (!dist) {
+      const fromSched = queryOne('SELECT distance_km FROM train_schedules WHERE train_number = ? AND station_code = ?', [train_number, from_station]);
+      const toSched   = queryOne('SELECT distance_km FROM train_schedules WHERE train_number = ? AND station_code = ?', [train_number, to_station]);
+      if (!fromSched || !toSched) throw new Error("Invalid route for this train.");
+      dist = Math.abs(toSched.distance_km - fromSched.distance_km);
+    }
+    
+    const cls = queryOne('SELECT fare_per_km FROM classes WHERE class_code = ?', [class_code]);
+    if (!cls) throw new Error("Invalid class code.");
+    
+    // Base distance is minimum 50km
+    const finalDist = Math.max(dist, 50);
+    const total_fare = Math.ceil(finalDist * cls.fare_per_km * passengers.length);
+
+    // Generate a random 10-digit PNR
+    const pnr = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Insert into pnr_bookings
+    db.run(`
+      INSERT INTO pnr_bookings (pnr, train_number, journey_date, from_station, to_station, class_code, coach, booking_date, total_fare)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [pnr, train_number, date, from_station, to_station, class_code, class_code.charAt(0) + '1', today, total_fare]);
+
+    // Insert passengers
+    const stmt = db.prepare(`
+      INSERT INTO passengers (pnr, name, age, gender, berth_pref, seat_number, booking_status)
+      VALUES (?, ?, ?, ?, ?, ?, 'CNF')
+    `);
+    
+    let seatNum = 1;
+    passengers.forEach(p => {
+      stmt.run([pnr, p.name, p.age, p.gender, p.berth_pref || 'N/A', class_code.charAt(0) + '1-' + (seatNum++)]);
+    });
+    stmt.free();
+
+    db.run('COMMIT');
+
+    // Persist memory db to file
+    const data = Buffer.from(db.export());
+    fs.writeFileSync(DB_PATH, data);
+
+    res.json({ success: true, message: 'Ticket booked successfully', pnr });
+  } catch (err) {
+    db.run('ROLLBACK');
+    res.status(500).json({ success: false, message: 'Booking failed due to an error.', error: err.message });
+  }
 });
 
 // ─── Serve Frontend ───────────────────────────────────────────────────────────

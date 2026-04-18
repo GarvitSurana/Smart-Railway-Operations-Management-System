@@ -27,6 +27,7 @@ document.getElementById('station-input').addEventListener('keydown', e => e.key 
 document.getElementById('from-input').addEventListener('keydown', e => e.key === 'Enter' && searchBetween());
 document.getElementById('to-input').addEventListener('keydown', e => e.key === 'Enter' && searchBetween());
 
+
 // ── Utility Helpers ────────────────────────────────────────────────────────
 function showLoading(el) {
   document.getElementById(el).innerHTML = `
@@ -489,3 +490,147 @@ async function loadStats() {
   } catch { }
 }
 loadStats();
+
+// ── BOOK TICKET ───────────────────────────────────────────────────────────
+let classFares = { '1A': 4.0, '2A': 2.5, '3A': 1.8, 'SL': 0.8, 'CC': 1.2 };
+
+async function searchTrainsForBooking() {
+  const f = document.getElementById('book-from').value.trim().toUpperCase();
+  const t = document.getElementById('book-to').value.trim().toUpperCase();
+  if (!f || !t) return showError('book-trains-list', 'Please enter source and destination');
+  
+  showLoading('book-trains-list');
+  document.getElementById('book-form').style.display = 'none';
+  
+  try {
+    const res = await fetch(`${API}/api/trains-between?from=${f}&to=${t}`);
+    const json = await res.json();
+    if (!json.success) return showError('book-trains-list', json.message);
+    if (!json.data.trains.length) return showError('book-trains-list', 'No direct trains found');
+    
+    const rows = json.data.trains.map(tr => `
+      <label class="train-card" style="display:flex; align-items:center; cursor:pointer; gap: 12px; border: 1px solid var(--border); margin-bottom: 8px;">
+        <input type="radio" name="book_selected_train" onchange="selectTrainForBooking('${tr.train_number}', ${tr.distance_km}, '${tr.train_name}')">
+        <div style="flex:1">
+          <div class="tc-name" style="font-size: 1rem;">${tr.train_name} (${tr.train_number})</div>
+          <div style="color:var(--text-2); font-size: 0.85rem; margin-top:4px;">
+            Departs <b>${f}</b> at ${tr.departure_time} | Arrives <b>${t}</b> at ${tr.arrival_time}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="tc-status" style="color:var(--accent)">${tr.distance_km} km</div>
+        </div>
+      </label>
+    `).join('');
+    
+    document.getElementById('book-trains-list').innerHTML = `<div style="display:flex; flex-direction:column;">${rows}</div>`;
+  } catch (e) {
+    showError('book-trains-list', 'Failed to fetch trains');
+  }
+}
+
+function selectTrainForBooking(train_number, distance, name) {
+  document.getElementById('book-train').value = train_number;
+  document.getElementById('book-distance').value = distance;
+  document.getElementById('book-selected-train-lbl').textContent = `${name} (${train_number})`;
+  document.getElementById('book-form').style.display = 'block';
+  updateDynamicPrice();
+}
+
+function updateDynamicPrice() {
+  const dist = parseInt(document.getElementById('book-distance').value) || 50;
+  const cls = document.getElementById('book-class').value;
+  const paxCount = 1;
+  const mult = classFares[cls] || 1;
+  const finalDist = Math.max(dist, 50);
+  const total = Math.ceil(finalDist * mult * paxCount);
+  document.getElementById('book-dynamic-price').textContent = `₹${total}`;
+}
+
+document.getElementById('book-pax-name').addEventListener('input', updateDynamicPrice);
+
+async function submitBooking() {
+  const data = {
+    train_number: document.getElementById('book-train').value.trim(),
+    from_station: document.getElementById('book-from').value.trim().toUpperCase(),
+    to_station: document.getElementById('book-to').value.trim().toUpperCase(),
+    class_code: document.getElementById('book-class').value, date: document.getElementById('book-date').value, distance: parseInt(document.getElementById('book-distance').value) || 0,
+    passengers: [{
+      name: document.getElementById('book-pax-name').value.trim(),
+      age: parseInt(document.getElementById('book-pax-age').value, 10),
+      gender: document.getElementById('book-pax-gender').value
+    }]
+  };
+
+  showLoading('book-result');
+  try {
+    const res = await fetch(`${API}/api/book-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const json = await res.json();
+    if (!json.success) {
+      showError('book-result', json.message);
+      return;
+    }
+    document.getElementById('book-result').innerHTML = `
+      <div class="error-card" style="background: rgba(39,174,96,0.1); border-color: rgba(39,174,96,0.2);">
+        <div class="error-icon" style="color: var(--success)">✅</div>
+        <div>
+          <div class="error-title" style="color: var(--success)">Booking Successful!</div>
+          <div class="error-msg" style="color: var(--text-2)">Your PNR is: <strong style="color:var(--text-main)">${json.pnr}</strong></div>
+        </div>
+      </div>
+      <button class="search-btn" onclick="quickPNR('${json.pnr}')" style="margin-top: 16px;">View PNR Status</button>
+    `;
+    document.getElementById('book-form').reset(); document.getElementById('book-form').style.display = 'none'; document.getElementById('book-trains-list').innerHTML = '';
+  } catch (e) {
+    showError('book-result', 'Server error. Make sure the server is running.');
+  }
+}
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+async function searchNotifications() {
+  showLoading('notify-result');
+  try {
+    const res = await fetch(`${API}/api/notifications`);
+    const json = await res.json();
+    if (!json.success) { showError('notify-result', json.message); return; }
+    
+    if (json.data.length === 0) {
+      document.getElementById('notify-result').innerHTML = `
+        <div class="error-card">
+          <div class="error-icon">ℹ️</div>
+          <div>
+            <div class="error-title">No Notifications</div>
+            <div class="error-msg">No train delays have triggered alerts yet. (Simulations run every minute)</div>
+          </div>
+        </div>`;
+      return;
+    }
+
+    const rows = json.data.map(n => `
+      <div class="train-card" style="border-left: 4px solid var(--error)">
+        <div style="flex: 1">
+          <div class="tc-name" style="color: var(--error); margin-bottom: 4px;">🚨 Train ${n.train_number}</div>
+          <div style="color: var(--text-2); line-height: 1.5;">${n.message}</div>
+          <div style="font-size: 0.8rem; color: var(--text-3); margin-top: 8px;">🕒 Triggered at: ${new Date(n.created_at).toLocaleString()}</div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('notify-result').innerHTML = `
+      <div style="display:flex; flex-direction: column; gap: 12px; margin-top: 20px;">
+        ${rows}
+      </div>
+    `;
+  } catch (e) {
+    showError('notify-result', 'Server error. Make sure the server is running.');
+  }
+}
+
+
+
+
+

@@ -67,6 +67,12 @@
       <button class="tab-btn" data-tab="station-board" role="tab" id="tab-station">
         <span class="tab-icon">🚉</span> Station Board
       </button>
+      <button class="tab-btn" data-tab="book-ticket" role="tab" id="tab-book">
+        <span class="tab-icon">🎫</span> Book Ticket
+      </button>
+      <button class="tab-btn" data-tab="notifications" role="tab" id="tab-notify" onclick="searchNotifications()">
+        <span class="tab-icon">💬</span> SMS Outbox
+      </button>
       <button class="tab-btn" data-tab="delay-alerts" role="tab" id="tab-delays" onclick="searchDelays()">
         <span class="tab-icon">🚨</span> Delay Alerts
       </button>
@@ -187,6 +193,97 @@
         </button>
       </div>
       <div id="delay-result"></div>
+    </div>
+
+    <!-- BOOK TICKET TAB -->
+    <div class="tab-content" id="book-ticket">
+      <div class="search-card">
+        <h2 class="search-title">Book Ticket</h2>
+        <p class="search-desc">Search for trains between stations to book your ticket</p>
+        
+        <!-- Step 1: Search Trains -->
+        <div class="search-row between-row">
+          <div class="search-field">
+            <label for="book-from">From</label>
+            <input type="text" id="book-from" placeholder="e.g. NDLS" required />
+          </div>
+          <div class="search-field">
+            <label for="book-to">To</label>
+            <input type="text" id="book-to" placeholder="e.g. BCT" required />
+          </div>
+          <button class="search-btn" onclick="searchTrainsForBooking()" type="button">
+            <span>Find Trains</span> →
+          </button>
+        </div>
+
+        <div id="book-trains-list" style="margin-top: 20px;"></div>
+
+        <!-- Step 2: Passenger & Booking (Hidden until train selected) -->
+        <form id="book-form" onsubmit="event.preventDefault(); submitBooking();" style="display: none; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">
+          <input type="hidden" id="book-train" required />
+          <input type="hidden" id="book-distance" required />
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--text-main);">Selected Train: <span id="book-selected-train-lbl" style="color:var(--accent)">None</span></h3>
+          </div>
+
+          <div class="search-row between-row">
+            <div class="search-field">
+              <label for="book-date">Journey Date</label>
+              <input type="date" id="book-date" required style="width:100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit; background: var(--bg);" />
+            </div>
+            <div class="search-field">
+              <label for="book-class">Class</label>
+              <select id="book-class" required style="width:100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit;" onchange="updateDynamicPrice()">
+                <option value="1A">1A</option>
+                <option value="2A">2A</option>
+                <option value="3A">3A</option>
+                <option value="SL">SL</option>
+                <option value="CC">CC</option>
+              </select>
+            </div>
+            <div class="search-field" style="display: flex; align-items: flex-end; justify-content: flex-end; flex: 1;">
+               <div style="text-align: right;">
+                 <div style="font-size: 0.85rem; color: var(--text-2);">Estimated Fare</div>
+                 <div id="book-dynamic-price" style="font-size: 1.5rem; font-weight: 700; color: var(--gold);">₹0</div>
+               </div>
+            </div>
+          </div>
+          
+          <h3 style="margin-top: 20px; font-size: 1.1rem; font-weight: 600; color: var(--text-main);">Passenger Details</h3>
+          <div class="search-row between-row" style="margin-top: 10px;">
+             <div class="search-field">
+               <input type="text" id="book-pax-name" placeholder="Passenger Name" required />
+             </div>
+             <div class="search-field" style="max-width: 100px;">
+               <input type="number" id="book-pax-age" placeholder="Age" required />
+             </div>
+             <div class="search-field" style="max-width: 120px;">
+               <select id="book-pax-gender" required style="width:100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+                  <option value="M">Male</option>
+                  <option value="F">Female</option>
+                  <option value="O">Other</option>
+               </select>
+             </div>
+          </div>
+          <button class="search-btn" type="submit" style="margin-top: 20px; width: 100%;">
+            <span>Confirm Booking</span> →
+          </button>
+        </form>
+      </div>
+      <div id="book-result"></div>
+    </div>
+
+    <!-- NOTIFICATIONS TAB -->
+    <div class="tab-content" id="notifications">
+      <div class="search-card">
+        <h2 class="search-title">Automated Delay Notifications</h2>
+        <p class="search-desc">Triggered automatically by the database when a train is significantly delayed.</p>
+        <button class="search-btn" onclick="searchNotifications()" style="margin-top:16px;">
+          <span>Refresh Alerts</span> →
+        </button>
+      </div>
+      <div id="notify-result"></div>
     </div>
   </div>
 

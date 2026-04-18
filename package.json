@@ -9,11 +9,12 @@
     "seed": "node database/seed.js"
   },
   "dependencies": {
-    "sql.js": "^1.10.2",
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "sql.js": "^1.10.2"
   },
   "devDependencies": {
+    "docx": "^9.6.1",
     "nodemon": "^3.0.3"
   }
 }
