@@ -433,8 +433,8 @@ async function searchDelays() {
   }
 }
 
-function renderDelays(passengers) {
-  if (passengers.length === 0) {
+function renderDelays(trains) {
+  if (trains.length === 0) {
     document.getElementById('delay-result').innerHTML = `
       <div class="error-card">
         <div class="error-icon">✅</div>
@@ -446,34 +446,31 @@ function renderDelays(passengers) {
     return;
   }
 
-  const paxRows = passengers.map(p => {
-    return `
-      <tr>
-        <td><strong>${p.name}</strong></td>
-        <td><code class="pnr-badge" style="font-size:0.85rem">${p.pnr}</code></td>
-        <td>
-          <div style="font-weight:600">${p.train_number}</div>
-          <div style="font-size:0.75rem;color:var(--text-2)">${p.train_name}</div>
-        </td>
-        <td>${p.from_station} → ${p.to_station}</td>
-        <td><span class="status-late">+${p.max_delay} min</span></td>
-      </tr>`;
-  }).join('');
+  const trainRows = trains.map(t => `
+    <tr>
+      <td>
+        <div style="font-weight:700">${t.train_number}</div>
+        <div style="font-size:0.75rem;color:var(--text-2);margin-top:2px">${t.train_name}</div>
+      </td>
+      <td><span style="font-size:0.85rem">${t.source_name} → ${t.dest_name}</span></td>
+      <td><span class="status-late">+${t.max_delay} min ⚠</span></td>
+      <td><span style="font-size:0.8rem;color:var(--text-3)">${t.affected_passengers} passenger${t.affected_passengers !== 1 ? 's' : ''}</span></td>
+    </tr>`
+  ).join('');
 
   document.getElementById('delay-result').innerHTML = `
     <div class="passengers-card" style="margin-top: 24px;">
-      <h3>🚨 Affected Passengers (${passengers.length})</h3>
+      <h3>🚨 Delayed Trains Today (${trains.length})</h3>
       <table class="passenger-table">
         <thead>
           <tr>
-            <th>Passenger Name</th>
-            <th>PNR</th>
             <th>Train</th>
             <th>Route</th>
             <th>Current Delay</th>
+            <th>Affected Pax</th>
           </tr>
         </thead>
-        <tbody>${paxRows}</tbody>
+        <tbody>${trainRows}</tbody>
       </table>
     </div>`;
 }
@@ -498,16 +495,16 @@ async function searchTrainsForBooking() {
   const f = document.getElementById('book-from').value.trim().toUpperCase();
   const t = document.getElementById('book-to').value.trim().toUpperCase();
   if (!f || !t) return showError('book-trains-list', 'Please enter source and destination');
-  
+
   showLoading('book-trains-list');
   document.getElementById('book-form').style.display = 'none';
-  
+
   try {
     const res = await fetch(`${API}/api/trains-between?from=${f}&to=${t}`);
     const json = await res.json();
     if (!json.success) return showError('book-trains-list', json.message);
     if (!json.data.trains.length) return showError('book-trains-list', 'No direct trains found');
-    
+
     const rows = json.data.trains.map(tr => `
       <label class="train-card" style="display:flex; align-items:center; cursor:pointer; gap: 12px; border: 1px solid var(--border); margin-bottom: 8px;">
         <input type="radio" name="book_selected_train" onchange="selectTrainForBooking('${tr.train_number}', ${tr.distance_km}, '${tr.train_name}')">
@@ -522,7 +519,7 @@ async function searchTrainsForBooking() {
         </div>
       </label>
     `).join('');
-    
+
     document.getElementById('book-trains-list').innerHTML = `<div style="display:flex; flex-direction:column;">${rows}</div>`;
   } catch (e) {
     showError('book-trains-list', 'Failed to fetch trains');
@@ -540,7 +537,7 @@ function selectTrainForBooking(train_number, distance, name) {
 function updateDynamicPrice() {
   const dist = parseInt(document.getElementById('book-distance').value) || 50;
   const cls = document.getElementById('book-class').value;
-  const paxCount = 1;
+  const paxCount = parseInt(document.getElementById('book-pax-count')?.value) || 1;
   const mult = classFares[cls] || 1;
   const finalDist = Math.max(dist, 50);
   const total = Math.ceil(finalDist * mult * paxCount);
@@ -549,17 +546,53 @@ function updateDynamicPrice() {
 
 document.getElementById('book-pax-name').addEventListener('input', updateDynamicPrice);
 
+// Set journey date minimum to today
+(function () {
+  const dateInput = document.getElementById('book-date');
+  if (dateInput) dateInput.min = new Date().toISOString().slice(0, 10);
+})();
+
 async function submitBooking() {
+  // --- Client-side validation ---
+  const journeyDate = document.getElementById('book-date').value;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (!journeyDate || journeyDate < todayStr) {
+    showError('book-result', 'Journey date must be today or a future date.');
+    return;
+  }
+
+  const age = parseInt(document.getElementById('book-pax-age').value, 10);
+  if (isNaN(age) || age < 18 || age > 150) {
+    showError('book-result', 'Passenger age must be between 18 and 150.');
+    return;
+  }
+
+  const aadhar = document.getElementById('book-pax-aadhar').value.trim();
+  if (!/^[0-9]{12}$/.test(aadhar)) {
+    showError('book-result', 'Aadhar number must be exactly 12 digits.');
+    return;
+  }
+
+  const paxCount = parseInt(document.getElementById('book-pax-count').value, 10) || 1;
+
+  const pax = {
+    name: document.getElementById('book-pax-name').value.trim(),
+    age,
+    gender: document.getElementById('book-pax-gender').value,
+    aadhar
+  };
+
+  // Repeat same passenger info for each count (simplified; real app would show N rows)
+  const passengers = Array.from({ length: paxCount }, () => ({ ...pax }));
+
   const data = {
     train_number: document.getElementById('book-train').value.trim(),
     from_station: document.getElementById('book-from').value.trim().toUpperCase(),
     to_station: document.getElementById('book-to').value.trim().toUpperCase(),
-    class_code: document.getElementById('book-class').value, date: document.getElementById('book-date').value, distance: parseInt(document.getElementById('book-distance').value) || 0,
-    passengers: [{
-      name: document.getElementById('book-pax-name').value.trim(),
-      age: parseInt(document.getElementById('book-pax-age').value, 10),
-      gender: document.getElementById('book-pax-gender').value
-    }]
+    class_code: document.getElementById('book-class').value,
+    date: journeyDate,
+    distance: parseInt(document.getElementById('book-distance').value) || 0,
+    passengers
   };
 
   showLoading('book-result');
@@ -584,53 +617,13 @@ async function submitBooking() {
       </div>
       <button class="search-btn" onclick="quickPNR('${json.pnr}')" style="margin-top: 16px;">View PNR Status</button>
     `;
-    document.getElementById('book-form').reset(); document.getElementById('book-form').style.display = 'none'; document.getElementById('book-trains-list').innerHTML = '';
+    document.getElementById('book-form').reset();
+    document.getElementById('book-form').style.display = 'none';
+    document.getElementById('book-trains-list').innerHTML = '';
   } catch (e) {
     showError('book-result', 'Server error. Make sure the server is running.');
   }
 }
-
-// ── NOTIFICATIONS ─────────────────────────────────────────────────────────
-async function searchNotifications() {
-  showLoading('notify-result');
-  try {
-    const res = await fetch(`${API}/api/notifications`);
-    const json = await res.json();
-    if (!json.success) { showError('notify-result', json.message); return; }
-    
-    if (json.data.length === 0) {
-      document.getElementById('notify-result').innerHTML = `
-        <div class="error-card">
-          <div class="error-icon">ℹ️</div>
-          <div>
-            <div class="error-title">No Notifications</div>
-            <div class="error-msg">No train delays have triggered alerts yet. (Simulations run every minute)</div>
-          </div>
-        </div>`;
-      return;
-    }
-
-    const rows = json.data.map(n => `
-      <div class="train-card" style="border-left: 4px solid var(--error)">
-        <div style="flex: 1">
-          <div class="tc-name" style="color: var(--error); margin-bottom: 4px;">🚨 Train ${n.train_number}</div>
-          <div style="color: var(--text-2); line-height: 1.5;">${n.message}</div>
-          <div style="font-size: 0.8rem; color: var(--text-3); margin-top: 8px;">🕒 Triggered at: ${new Date(n.created_at).toLocaleString()}</div>
-        </div>
-      </div>
-    `).join('');
-
-    document.getElementById('notify-result').innerHTML = `
-      <div style="display:flex; flex-direction: column; gap: 12px; margin-top: 20px;">
-        ${rows}
-      </div>
-    `;
-  } catch (e) {
-    showError('notify-result', 'Server error. Make sure the server is running.');
-  }
-}
-
-
 
 
 

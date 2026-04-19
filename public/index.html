@@ -28,21 +28,7 @@
     </div>
   </header>
 
-  <!-- ── TICKER ─────────────────────────────────────────────────────────── -->
-  <div class="ticker-wrapper">
-    <div class="ticker-label">ALERTS</div>
-    <div class="ticker-track">
-      <div class="ticker-content">
-        🚨 Train 12951 Mumbai Rajdhani running 25 min late &nbsp;|&nbsp;
-        ✅ Train 12009 Shatabdi Express running on time &nbsp;|&nbsp;
-        ⚠️ Fog alert on Central Railway – Delhi routes may be delayed &nbsp;|&nbsp;
-        🛑 Maintenance block on MAS–NGP section tonight 01:00–03:00 &nbsp;|&nbsp;
-        📢 Emergency helpline: 139 &nbsp;|&nbsp;
-        🚨 Train 12951 Mumbai Rajdhani running 25 min late &nbsp;|&nbsp;
-        ✅ Train 12009 Shatabdi Express running on time &nbsp;|&nbsp;
-      </div>
-    </div>
-  </div>
+
 
   <!-- ── HERO ───────────────────────────────────────────────────────────── -->
   <section class="hero">
@@ -70,11 +56,9 @@
       <button class="tab-btn" data-tab="book-ticket" role="tab" id="tab-book">
         <span class="tab-icon">🎫</span> Book Ticket
       </button>
-      <button class="tab-btn" data-tab="notifications" role="tab" id="tab-notify" onclick="searchNotifications()">
-        <span class="tab-icon">💬</span> SMS Outbox
-      </button>
+
       <button class="tab-btn" data-tab="delay-alerts" role="tab" id="tab-delays" onclick="searchDelays()">
-        <span class="tab-icon">🚨</span> Delay Alerts
+        <span class="tab-icon">🚨</span> Train Delays
       </button>
     </nav>
 
@@ -183,11 +167,11 @@
       <div id="station-result"></div>
     </div>
 
-    <!-- DELAY ALERTS TAB -->
+    <!-- TRAIN DELAYS TAB -->
     <div class="tab-content" id="delay-alerts">
       <div class="search-card">
-        <h2 class="search-title">Delayed Passengers</h2>
-        <p class="search-desc">All passengers travelling on delayed trains today</p>
+        <h2 class="search-title">Delayed Trains</h2>
+        <p class="search-desc">All trains currently running behind schedule today</p>
         <button class="search-btn" onclick="searchDelays()" style="margin-top:16px;">
           <span>Refresh List</span> →
         </button>
@@ -252,11 +236,17 @@
           
           <h3 style="margin-top: 20px; font-size: 1.1rem; font-weight: 600; color: var(--text-main);">Passenger Details</h3>
           <div class="search-row between-row" style="margin-top: 10px;">
+             <div class="search-field" style="max-width: 160px;">
+               <label for="book-pax-count" style="font-size:0.8rem;color:var(--text-2);display:block;margin-bottom:4px;">No. of Passengers</label>
+               <input type="number" id="book-pax-count" placeholder="1" min="1" max="6" value="1" required style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);font-family:inherit;background:var(--bg);" onchange="updateDynamicPrice()" />
+             </div>
+          </div>
+          <div class="search-row between-row" style="margin-top: 10px;">
              <div class="search-field">
                <input type="text" id="book-pax-name" placeholder="Passenger Name" required />
              </div>
              <div class="search-field" style="max-width: 100px;">
-               <input type="number" id="book-pax-age" placeholder="Age" required />
+               <input type="number" id="book-pax-age" placeholder="Age (18-150)" min="18" max="150" required />
              </div>
              <div class="search-field" style="max-width: 120px;">
                <select id="book-pax-gender" required style="width:100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
@@ -264,6 +254,11 @@
                   <option value="F">Female</option>
                   <option value="O">Other</option>
                </select>
+             </div>
+          </div>
+          <div class="search-row between-row" style="margin-top: 10px;">
+             <div class="search-field">
+               <input type="text" id="book-pax-aadhar" placeholder="Aadhar Number (12 digits)" maxlength="12" pattern="[0-9]{12}" required style="letter-spacing:2px;" />
              </div>
           </div>
           <button class="search-btn" type="submit" style="margin-top: 20px; width: 100%;">
@@ -274,17 +269,7 @@
       <div id="book-result"></div>
     </div>
 
-    <!-- NOTIFICATIONS TAB -->
-    <div class="tab-content" id="notifications">
-      <div class="search-card">
-        <h2 class="search-title">Automated Delay Notifications</h2>
-        <p class="search-desc">Triggered automatically by the database when a train is significantly delayed.</p>
-        <button class="search-btn" onclick="searchNotifications()" style="margin-top:16px;">
-          <span>Refresh Alerts</span> →
-        </button>
-      </div>
-      <div id="notify-result"></div>
-    </div>
+
   </div>
 
   <!-- ── STATS BAR ──────────────────────────────────────────────────────── -->

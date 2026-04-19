@@ -113,9 +113,14 @@ async function seedDatabase() {
     WHEN NEW.delay_arrival_min > 30 OR NEW.delay_depart_min > 30
     BEGIN
       INSERT INTO notifications (train_number, message)
-      VALUES (
-        NEW.train_number, 
-        'Train ' || NEW.train_number || ' is significantly delayed at station ' || NEW.station_code || '. Delay: ' || MAX(NEW.delay_arrival_min, NEW.delay_depart_min) || ' minutes.'
+      SELECT
+        NEW.train_number,
+        'Train ' || NEW.train_number || ' is significantly delayed. Delay: ' ||
+          MAX(NEW.delay_arrival_min, NEW.delay_depart_min) || ' minutes.'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM notifications
+        WHERE train_number = NEW.train_number
+          AND created_at >= datetime('now', '-5 minutes')
       );
     END;
   `);
@@ -509,10 +514,14 @@ async function seedDatabase() {
   });
   insSched.free();
   // ─── PNR BOOKINGS ─────────────────────────────────────────────────────────────
-  const today = new Date().toISOString().slice(0, 10); // e.g. 2026-03-13
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  function getISTStr(offsetMs = 0) {
+    const d = new Date(Date.now() + offsetMs);
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  }
 
+  const today = getISTStr(0); // e.g. 2026-04-19
+  const tomorrow = getISTStr(86400000);
+  const yesterday = getISTStr(-86400000);
   const pnrs = [
     ['1234567890', '12301', today,     'NDLS', 'HWH',  '2A', 'B1',  today,     4800],
     ['2345678901', '12301', today,     'NDLS', 'HWH',  'SL', 'S4',  yesterday, 1450],

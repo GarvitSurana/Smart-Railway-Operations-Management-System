@@ -1,11 +1,11 @@
-// server.js — Indian Railway NTES Backend
-const express  = require('express');
-const cors     = require('cors');
-const path     = require('path');
-const fs       = require('fs');
+// server.js Indian Railway NTES Backend
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const initSqlJs = require('sql.js');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, 'database', 'railway.db');
 
@@ -15,7 +15,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 let db;
 
-// ─── Load Database ────────────────────────────────────────────────────────────
+// ─── Load Database
 async function loadDatabase() {
   const SQL = await initSqlJs();
   if (!fs.existsSync(DB_PATH)) {
@@ -45,6 +45,12 @@ function queryOne(sql, params = []) {
   return rows[0] || null;
 }
 
+// Helper: return today's date in IST as YYYY-MM-DD (avoids UTC/IST midnight mismatch)
+function getTodayIST() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
+
 // Helper: randomly delay a train to trigger notifications
 function simulateRandomDelay() {
   if (!db) return;
@@ -57,7 +63,7 @@ function simulateRandomDelay() {
         delay_depart_min = delay_depart_min + ?
     WHERE train_number = ? AND has_passed = 0
   `, [extraDelay, extraDelay, train.train_number]);
-  
+
   // Persist memory db to file
   const data = Buffer.from(db.export());
   fs.writeFileSync(DB_PATH, data);
@@ -221,33 +227,40 @@ app.get('/api/pnr/:pnr', (req, res) => {
       booking,
       passengers,
       departureTime: fromSchedule ? fromSchedule.departure_time : 'N/A',
-      arrivalTime:   toSchedule   ? toSchedule.arrival_time     : 'N/A',
+      arrivalTime: toSchedule ? toSchedule.arrival_time : 'N/A',
     }
   });
 });
 
-// GET /api/delayed-passengers — List passengers on delayed trains
+// GET /api/delayed-passengers — List delayed trains (one row per train)
 app.get('/api/delayed-passengers', (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
   const delayedSql = `
     SELECT
-      p.name, p.age, p.gender, p.seat_number, p.booking_status, p.pnr,
-      pb.train_number, t.train_name, pb.from_station, pb.to_station,
-      MAX(rs.delay_arrival_min, rs.delay_depart_min) as max_delay
-    FROM passengers p
-    JOIN pnr_bookings pb ON p.pnr = pb.pnr
-    JOIN trains t ON pb.train_number = t.train_number
-    JOIN train_running_status rs ON pb.train_number = rs.train_number AND rs.status_date = pb.journey_date
-    WHERE rs.delay_arrival_min > 0 OR rs.delay_depart_min > 0
-    GROUP BY p.pnr, p.id
+      t.train_number,
+      t.train_name,
+      s1.station_name AS source_name,
+      s2.station_name AS dest_name,
+      MAX(CASE WHEN rs.delay_arrival_min > rs.delay_depart_min THEN rs.delay_arrival_min ELSE rs.delay_depart_min END) AS max_delay,
+      COUNT(DISTINCT p.id) AS affected_passengers
+    FROM trains t
+    JOIN stations s1 ON t.source_code = s1.station_code
+    JOIN stations s2 ON t.dest_code   = s2.station_code
+    JOIN train_running_status rs ON rs.train_number = t.train_number AND rs.status_date = ?
+    LEFT JOIN pnr_bookings pb ON pb.train_number = t.train_number AND pb.journey_date = ?
+    LEFT JOIN passengers p ON p.pnr = pb.pnr
+    WHERE (rs.delay_arrival_min > 0 OR rs.delay_depart_min > 0)
+    GROUP BY t.train_number, t.train_name, s1.station_name, s2.station_name
     ORDER BY max_delay DESC
   `;
-  const delayedPassengers = queryAll(delayedSql);
+  const delayedTrains = queryAll(delayedSql, [today, today]);
 
   res.json({
     success: true,
-    data: delayedPassengers
+    data: delayedTrains
   });
 });
+
 
 // GET /api/trains-between?from=NDLS&to=HWH&date=2026-03-13
 app.get('/api/trains-between', (req, res) => {
@@ -278,7 +291,7 @@ app.get('/api/trains-between', (req, res) => {
   `, [from, to]);
 
   const fromStation = queryOne('SELECT * FROM stations WHERE UPPER(station_code) = UPPER(?)', [from]);
-  const toStation   = queryOne('SELECT * FROM stations WHERE UPPER(station_code) = UPPER(?)', [to]);
+  const toStation = queryOne('SELECT * FROM stations WHERE UPPER(station_code) = UPPER(?)', [to]);
 
   res.json({
     success: true,
@@ -341,11 +354,8 @@ app.get('/api/classes', (req, res) => {
   res.json({ success: true, data: classes });
 });
 
-// GET /api/notifications — Get all delay notifications
-app.get('/api/notifications', (req, res) => {
-  const notifications = queryAll('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20');
-  res.json({ success: true, data: notifications });
-});
+
+
 
 // POST /api/book-ticket — Book a ticket with concurrency control
 app.post('/api/book-ticket', (req, res) => {
@@ -354,21 +364,50 @@ app.post('/api/book-ticket', (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing booking details' });
   }
 
+  // --- Server-side validation ---
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (date < todayStr) {
+    return res.status(400).json({ success: false, message: 'Journey date must be today or a future date.' });
+  }
+
+  for (const p of passengers) {
+    if (!Number.isInteger(p.age) || p.age < 18 || p.age > 150) {
+      return res.status(400).json({ success: false, message: `Invalid age (${p.age}). Age must be between 18 and 150.` });
+    }
+  }
+
   try {
     db.run('BEGIN TRANSACTION');
+
+    // Capacity check: count existing confirmed passengers on this train for the journey date
+    const train = queryOne('SELECT capacity FROM trains WHERE train_number = ?', [train_number]);
+    if (!train) throw new Error('Train not found.');
+
+    const booked = queryOne(`
+      SELECT COUNT(*) AS cnt
+      FROM passengers pax
+      JOIN pnr_bookings pb ON pax.pnr = pb.pnr
+      WHERE pb.train_number = ? AND pb.journey_date = ? AND pax.booking_status = 'CNF'
+    `, [train_number, date]);
+
+    const bookedCount = booked ? booked.cnt : 0;
+    if (bookedCount + passengers.length > train.capacity) {
+      db.run('ROLLBACK');
+      return res.status(409).json({ success: false, message: `Train Full — only ${Math.max(0, train.capacity - bookedCount)} seat(s) remaining.` });
+    }
 
     // Calculate Dynamic Fare
     let dist = distance;
     if (!dist) {
       const fromSched = queryOne('SELECT distance_km FROM train_schedules WHERE train_number = ? AND station_code = ?', [train_number, from_station]);
-      const toSched   = queryOne('SELECT distance_km FROM train_schedules WHERE train_number = ? AND station_code = ?', [train_number, to_station]);
+      const toSched = queryOne('SELECT distance_km FROM train_schedules WHERE train_number = ? AND station_code = ?', [train_number, to_station]);
       if (!fromSched || !toSched) throw new Error("Invalid route for this train.");
       dist = Math.abs(toSched.distance_km - fromSched.distance_km);
     }
-    
+
     const cls = queryOne('SELECT fare_per_km FROM classes WHERE class_code = ?', [class_code]);
     if (!cls) throw new Error("Invalid class code.");
-    
+
     // Base distance is minimum 50km
     const finalDist = Math.max(dist, 50);
     const total_fare = Math.ceil(finalDist * cls.fare_per_km * passengers.length);
@@ -376,7 +415,7 @@ app.post('/api/book-ticket', (req, res) => {
     // Generate a random 10-digit PNR
     const pnr = Math.floor(1000000000 + Math.random() * 9000000000).toString();
     const today = new Date().toISOString().slice(0, 10);
-    
+
     // Insert into pnr_bookings
     db.run(`
       INSERT INTO pnr_bookings (pnr, train_number, journey_date, from_station, to_station, class_code, coach, booking_date, total_fare)
@@ -388,8 +427,8 @@ app.post('/api/book-ticket', (req, res) => {
       INSERT INTO passengers (pnr, name, age, gender, berth_pref, seat_number, booking_status)
       VALUES (?, ?, ?, ?, ?, ?, 'CNF')
     `);
-    
-    let seatNum = 1;
+
+    let seatNum = bookedCount + 1;
     passengers.forEach(p => {
       stmt.run([pnr, p.name, p.age, p.gender, p.berth_pref || 'N/A', class_code.charAt(0) + '1-' + (seatNum++)]);
     });
